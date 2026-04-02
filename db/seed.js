@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = join(__dirname, "payroll.db");
-const CSV_PATH = join(__dirname, "..", "payroll_data.csv");
+const CSV_PATH = join(__dirname, "payroll_data.csv");
 const SCHEMA_PATH = join(__dirname, "schema.sql");
 
 const db = new Database(DB_PATH);
@@ -84,16 +84,22 @@ const seed = db.transaction(() => {
       employeeId,
       name,
       weekEnding,
-      ...cols.slice(5).map(Number)
+      ...cols.slice(5).map(Number),
     );
   }
 });
 
 seed();
 
-const employeeCount = db.prepare("SELECT COUNT(*) AS count FROM employees").get().count;
-const timesheetCount = db.prepare("SELECT COUNT(*) AS count FROM timesheets").get().count;
+const employeeCount = db
+  .prepare("SELECT COUNT(*) AS count FROM employees")
+  .get().count;
+const timesheetCount = db
+  .prepare("SELECT COUNT(*) AS count FROM timesheets")
+  .get().count;
 
-console.log(`Seeded ${employeeCount} employees and ${timesheetCount} timesheets into ${DB_PATH}`);
+console.log(
+  `Seeded ${employeeCount} employees and ${timesheetCount} timesheets into ${DB_PATH}`,
+);
 
 db.close();

@@ -1,6 +1,6 @@
 import { money } from "../lib/format.js";
 
-export function employeeListView({ dailyStats, rateStats, totals, levelAgg }) {
+export function employeeListView({ dailyStats, rateStats, totals, levelAgg, anomalyIds }) {
   // Highest total pay across all employees — used to scale the bar chart
   const maxPay = Math.max(...totals.map((t) => t.total_pay));
 
@@ -13,9 +13,11 @@ export function employeeListView({ dailyStats, rateStats, totals, levelAgg }) {
       <td>${l.avg_daily_hours}</td>
     </tr>`).join("");
 
+  const anom = (id) => anomalyIds.has(id) ? ' class="has-anomaly"' : "";
+
   // Per-employee daily hours table rows — min/max/avg with name linking to detail page
   const dailyRows = dailyStats.map((e) => `
-    <tr>
+    <tr${anom(e.employee_id)}>
       <td><a href="/employees/${e.employee_id}">${e.name}</a></td>
       <td>${e.employee_id}</td>
       <td>${e.level}</td>
@@ -27,7 +29,7 @@ export function employeeListView({ dailyStats, rateStats, totals, levelAgg }) {
 
   // Rate ranges table rows — min/avg/max for standard, overtime, and benefits rates
   const rateRows = rateStats.map((e) => `
-    <tr>
+    <tr${anom(e.employee_id)}>
       <td><a href="/employees/${e.employee_id}">${e.name}</a></td>
       <td>${e.employee_id}</td>
       <td>${e.level}</td>
@@ -47,7 +49,7 @@ export function employeeListView({ dailyStats, rateStats, totals, levelAgg }) {
 
   // Employee totals table rows — weeks worked, standard/overtime hours, and total pay
   const totalsRows = totals.map((e) => `
-    <tr>
+    <tr${anom(e.employee_id)}>
       <td><a href="/employees/${e.employee_id}">${e.name}</a></td>
       <td>${e.employee_id}</td>
       <td>${e.level}</td>
