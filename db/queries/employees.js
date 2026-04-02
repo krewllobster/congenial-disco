@@ -130,6 +130,10 @@ export function getEmployeeTotals() {
         t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours
       ), 1) AS total_ot_hours,
       ROUND(SUM(
+        (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+         + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) * t.benefits_rate
+      ), 2) AS total_benefits,
+      ROUND(SUM(
         (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours) * t.standard_rate
         + (t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) * t.overtime_rate
         + (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
