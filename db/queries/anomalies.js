@@ -52,53 +52,68 @@ export function getRateAnomalies() {
     .all();
 }
 
+/** Default thresholds for daily hours anomaly detection */
+export const DAILY_HOURS_DEFAULTS = {
+  maxStandardHours: 8,
+  maxTotalHours: 12,
+};
+
 /**
- * Identifies individual days where an employee worked more than 12 hours.
- * Unpivots the per-day columns (Mon–Sun) into a single "daily" CTE by unioning
- * standard + overtime hours for each day of the week, then filters to rows
- * exceeding the 12-hour threshold. Results are ordered by hours descending.
+ * Identifies individual days where an employee's standard hours exceed a
+ * per-day cap, or where total (standard + overtime) hours exceed a total cap.
+ * Each flagged row includes a `flag` field indicating which threshold was
+ * tripped: "standard", "total", or "both".
  *
+ * @param {{ maxStandardHours?: number, maxTotalHours?: number }} [opts]
  * @returns {{
  *   name: string,
  *   employee_id: number,
  *   week_ending: string,
  *   day: string,
- *   hours: number
+ *   st_hours: number,
+ *   ot_hours: number,
+ *   hours: number,
+ *   flag: string
  * }[]}
  */
-export function getExcessiveDailyHours() {
+export function getExcessiveDailyHours(opts = {}) {
+  const maxSt = opts.maxStandardHours ?? DAILY_HOURS_DEFAULTS.maxStandardHours;
+  const maxTotal = opts.maxTotalHours ?? DAILY_HOURS_DEFAULTS.maxTotalHours;
   return db
     .prepare(
       `
     WITH daily AS (
-      SELECT e.name, e.id AS employee_id, t.week_ending, 'Mon' AS day, (t.mon_st_hours + t.mon_ot_hours) AS hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Tue', (t.tue_st_hours + t.tue_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Wed', (t.wed_st_hours + t.wed_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Thu', (t.thu_st_hours + t.thu_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Fri', (t.fri_st_hours + t.fri_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Sat', (t.sat_st_hours + t.sat_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
-      UNION ALL SELECT e.name, e.id, t.week_ending, 'Sun', (t.sun_st_hours + t.sun_ot_hours) FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      SELECT e.name, e.id AS employee_id, t.week_ending, 'Mon' AS day, t.mon_st_hours AS st_hours, t.mon_ot_hours AS ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Tue', t.tue_st_hours, t.tue_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Wed', t.wed_st_hours, t.wed_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Thu', t.thu_st_hours, t.thu_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Fri', t.fri_st_hours, t.fri_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Sat', t.sat_st_hours, t.sat_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
+      UNION ALL SELECT e.name, e.id, t.week_ending, 'Sun', t.sun_st_hours, t.sun_ot_hours FROM timesheets t JOIN employees e ON e.id = t.employee_id
     )
-    SELECT name, employee_id, week_ending, day, ROUND(hours, 1) AS hours
+    SELECT name, employee_id, week_ending, day,
+      ROUND(st_hours, 1) AS st_hours,
+      ROUND(ot_hours, 1) AS ot_hours,
+      ROUND(st_hours + ot_hours, 1) AS hours,
+      CASE
+        WHEN st_hours > ? AND (st_hours + ot_hours) > ? THEN 'both'
+        WHEN st_hours > ? THEN 'standard'
+        ELSE 'total'
+      END AS flag
     FROM daily
-    WHERE hours > 12
+    WHERE st_hours > ? OR (st_hours + ot_hours) > ?
     ORDER BY hours DESC
   `,
     )
-    .all();
+    .all(maxSt, maxTotal, maxSt, maxSt, maxTotal);
 }
 
 /**
- * Finds timesheet weeks where an employee's total hours (standard + overtime,
- * summed across all seven days) exceed 60. Orders results by total hours
- * descending to highlight the most extreme weeks first.
+ * Finds timesheet weeks where:
+ * - total hours exceed 60 (excessive), OR
+ * - total hours > 40 and reported OT is less than (total - 40) (OT misclassification)
  *
- * @returns {{
- *   name: string,
- *   employee_id: number,
- *   week_ending: string,
- *   total_hours: number
- * }[]}
+ * Returns a `flag` field: "excessive", "ot_misclass", or "both".
  */
 export function getExcessiveWeeklyHours() {
   return db
@@ -108,13 +123,44 @@ export function getExcessiveWeeklyHours() {
       e.name,
       e.id AS employee_id,
       t.week_ending,
+      t.mon_st_hours, t.mon_ot_hours,
+      t.tue_st_hours, t.tue_ot_hours,
+      t.wed_st_hours, t.wed_ot_hours,
+      t.thu_st_hours, t.thu_ot_hours,
+      t.fri_st_hours, t.fri_ot_hours,
+      t.sat_st_hours, t.sat_ot_hours,
+      t.sun_st_hours, t.sun_ot_hours,
+      ROUND(t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours, 1) AS total_st,
+      ROUND(t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours, 1) AS total_ot,
       ROUND(
         t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
         + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours
-      , 1) AS total_hours
+      , 1) AS total_hours,
+      CASE
+        WHEN (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+          AND (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 40
+          AND (t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours)
+              < ROUND((t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) - 40, 1)
+          THEN 'both'
+        WHEN (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+          THEN 'excessive'
+        ELSE 'ot_misclass'
+      END AS flag
     FROM timesheets t
     JOIN employees e ON e.id = t.employee_id
-    WHERE total_hours > 60
+    WHERE (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+          + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+      OR (
+        (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+          + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 40
+        AND (t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours)
+            < ROUND((t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+            + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) - 40, 1)
+      )
     ORDER BY total_hours DESC
   `,
     )
@@ -198,42 +244,47 @@ export function getRateAnomaliesForEmployee(employeeId) {
 }
 
 /**
- * Single-employee variant of getExcessiveDailyHours. Unpivots the seven
- * per-day hour columns into individual rows for the given employee, then
- * filters to days exceeding 12 hours. Sorted by hours descending.
+ * Single-employee variant of getExcessiveDailyHours. Same threshold logic.
  *
  * @param {number} employeeId
+ * @param {{ maxStandardHours?: number, maxTotalHours?: number }} [opts]
  * @returns {Object[]}
  */
-export function getExcessiveDailyHoursForEmployee(employeeId) {
+export function getExcessiveDailyHoursForEmployee(employeeId, opts = {}) {
+  const maxSt = opts.maxStandardHours ?? DAILY_HOURS_DEFAULTS.maxStandardHours;
+  const maxTotal = opts.maxTotalHours ?? DAILY_HOURS_DEFAULTS.maxTotalHours;
   return db
     .prepare(
       `
     WITH daily AS (
-      SELECT t.week_ending, 'Mon' AS day, (t.mon_st_hours + t.mon_ot_hours) AS hours FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Tue', (t.tue_st_hours + t.tue_ot_hours) FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Wed', (t.wed_st_hours + t.wed_ot_hours) FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Thu', (t.thu_st_hours + t.thu_ot_hours) FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Fri', (t.fri_st_hours + t.fri_ot_hours) FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Sat', (t.sat_st_hours + t.sat_ot_hours) FROM timesheets t WHERE t.employee_id = ?
-      UNION ALL SELECT t.week_ending, 'Sun', (t.sun_st_hours + t.sun_ot_hours) FROM timesheets t WHERE t.employee_id = ?
+      SELECT t.week_ending, 'Mon' AS day, t.mon_st_hours AS st_hours, t.mon_ot_hours AS ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Tue', t.tue_st_hours, t.tue_ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Wed', t.wed_st_hours, t.wed_ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Thu', t.thu_st_hours, t.thu_ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Fri', t.fri_st_hours, t.fri_ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Sat', t.sat_st_hours, t.sat_ot_hours FROM timesheets t WHERE t.employee_id = ?
+      UNION ALL SELECT t.week_ending, 'Sun', t.sun_st_hours, t.sun_ot_hours FROM timesheets t WHERE t.employee_id = ?
     )
-    SELECT week_ending, day, ROUND(hours, 1) AS hours
+    SELECT week_ending, day,
+      ROUND(st_hours, 1) AS st_hours,
+      ROUND(ot_hours, 1) AS ot_hours,
+      ROUND(st_hours + ot_hours, 1) AS hours,
+      CASE
+        WHEN st_hours > ? AND (st_hours + ot_hours) > ? THEN 'both'
+        WHEN st_hours > ? THEN 'standard'
+        ELSE 'total'
+      END AS flag
     FROM daily
-    WHERE hours > 12
+    WHERE st_hours > ? OR (st_hours + ot_hours) > ?
     ORDER BY hours DESC
   `,
     )
-    .all(employeeId, employeeId, employeeId, employeeId, employeeId, employeeId, employeeId);
+    .all(employeeId, employeeId, employeeId, employeeId, employeeId, employeeId, employeeId,
+      maxSt, maxTotal, maxSt, maxSt, maxTotal);
 }
 
 /**
- * Single-employee variant of getExcessiveWeeklyHours. Sums standard + overtime
- * hours across all seven days for the given employee and returns only weeks
- * where the total exceeds 60 hours. Sorted by total hours descending.
- *
- * @param {number} employeeId
- * @returns {Object[]}
+ * Single-employee variant of getExcessiveWeeklyHours. Same logic: >60h or OT misclassification.
  */
 export function getExcessiveWeeklyHoursForEmployee(employeeId) {
   return db
@@ -241,12 +292,46 @@ export function getExcessiveWeeklyHoursForEmployee(employeeId) {
       `
     SELECT
       t.week_ending,
+      t.mon_st_hours, t.mon_ot_hours,
+      t.tue_st_hours, t.tue_ot_hours,
+      t.wed_st_hours, t.wed_ot_hours,
+      t.thu_st_hours, t.thu_ot_hours,
+      t.fri_st_hours, t.fri_ot_hours,
+      t.sat_st_hours, t.sat_ot_hours,
+      t.sun_st_hours, t.sun_ot_hours,
+      ROUND(t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours, 1) AS total_st,
+      ROUND(t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours, 1) AS total_ot,
       ROUND(
         t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
         + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours
-      , 1) AS total_hours
+      , 1) AS total_hours,
+      CASE
+        WHEN (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+          AND (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 40
+          AND (t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours)
+              < ROUND((t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) - 40, 1)
+          THEN 'both'
+        WHEN (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+          THEN 'excessive'
+        ELSE 'ot_misclass'
+      END AS flag
     FROM timesheets t
-    WHERE t.employee_id = ? AND total_hours > 60
+    WHERE t.employee_id = ?
+      AND (
+        (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+          + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 60
+        OR (
+          (t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+            + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) > 40
+          AND (t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours)
+              < ROUND((t.mon_st_hours + t.tue_st_hours + t.wed_st_hours + t.thu_st_hours + t.fri_st_hours + t.sat_st_hours + t.sun_st_hours
+              + t.mon_ot_hours + t.tue_ot_hours + t.wed_ot_hours + t.thu_ot_hours + t.fri_ot_hours + t.sat_ot_hours + t.sun_ot_hours) - 40, 1)
+        )
+      )
     ORDER BY total_hours DESC
   `,
     )

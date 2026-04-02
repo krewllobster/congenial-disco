@@ -29,3 +29,17 @@ CREATE TABLE IF NOT EXISTS timesheets (
   benefits_rate REAL NOT NULL,
   UNIQUE (employee_id, week_ending)
 );
+
+CREATE TABLE IF NOT EXISTS corrections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT,
+  correction_type TEXT NOT NULL CHECK (correction_type IN ('rate', 'daily_hours', 'weekly_hours', 'name_unify', 'name_split')),
+  target_table TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  field TEXT,
+  old_value TEXT NOT NULL,
+  new_value TEXT NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reverted_at TEXT
+);

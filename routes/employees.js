@@ -15,9 +15,15 @@ import {
   getExcessiveDailyHoursForEmployee,
   getExcessiveWeeklyHoursForEmployee,
   getNameMismatchForEmployee,
+  getRateAnomalies,
   getRateAnomaliesForEmployee,
+  getExcessiveDailyHours,
+  getExcessiveWeeklyHours,
+  getNameMismatches,
+  getSevenDayWeeks,
   getSevenDayWeeksForEmployee,
 } from "../db/queries/anomalies.js";
+import { getDistinctNamesForEmployee } from "../db/queries/corrections.js";
 
 const router = express.Router();
 
@@ -27,7 +33,16 @@ router.get("/", (req, res) => {
   const totals = getEmployeeTotals();
   const levelAgg = getLevelAggregates();
 
-  const content = employeeListView({ dailyStats, rateStats, totals, levelAgg });
+  // Collect employee IDs that appear in any anomaly list
+  const anomalyIds = new Set([
+    ...getRateAnomalies().map((r) => r.employee_id),
+    ...getExcessiveDailyHours().map((r) => r.employee_id),
+    ...getExcessiveWeeklyHours().map((r) => r.employee_id),
+    ...getNameMismatches().map((r) => r.employee_id),
+    ...getSevenDayWeeks().map((r) => r.employee_id),
+  ]);
+
+  const content = employeeListView({ dailyStats, rateStats, totals, levelAgg, anomalyIds });
   res.type("html").send(layout("Employee Overviews", content));
 });
 
@@ -39,15 +54,20 @@ router.get("/:id", (req, res) => {
 
   const summary = getEmployeeSummary(employee.id);
   const timesheets = getEmployeeTimesheets(employee.id);
+  const nameMismatch = getNameMismatchForEmployee(employee.id);
   const anomalies = {
     rateAnomalies: getRateAnomaliesForEmployee(employee.id),
     dailyHours: getExcessiveDailyHoursForEmployee(employee.id),
     weeklyHours: getExcessiveWeeklyHoursForEmployee(employee.id),
     sevenDayWeeks: getSevenDayWeeksForEmployee(employee.id),
-    nameMismatch: getNameMismatchForEmployee(employee.id),
+    nameMismatch: nameMismatch
+      ? { ...nameMismatch, nameList: getDistinctNamesForEmployee(employee.id) }
+      : null,
   };
 
-  const content = employeeDetailView({ employee, summary, timesheets, anomalies });
+  const flash = req.query.flash || null;
+  const error = req.query.error || null;
+  const content = employeeDetailView({ employee, summary, timesheets, anomalies, flash, error });
   res.type("html").send(layout(employee.name, content));
 });
 
