@@ -1,32 +1,301 @@
 body {
-  padding: 50px;
+  padding: 0;
+  margin: 0;
   font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+  color: #333;
 }
 
 a {
   color: #00B7FF;
 }
 
-table {
+nav {
+  background: #2c3e50;
+  padding: 12px 24px;
+  display: flex;
+  gap: 24px;
+}
+
+nav a {
+  color: #ecf0f1;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+nav a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+h1 {
+  padding: 20px 24px 0;
+}
+
+h2 {
+  margin-top: 2rem;
+  border-bottom: 2px solid #eee;
+  padding-bottom: 4px;
+}
+
+h1, h2, p, section, .data-table, .table-note, .section-links {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+/* Stat cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  padding: 0;
+}
+
+.stat-card {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.stat-card h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 0;
+  color: #2c3e50;
+}
+
+.stat-detail {
+  font-size: 12px;
+  color: #888;
+  margin: 4px 0 0;
+}
+
+/* Data tables */
+.data-table {
   border-collapse: collapse;
-  width: 100%;
-  margin-top: 1rem;
+  width: calc(100% - 48px);
+  margin-top: 0.5rem;
   font-size: 13px;
 }
 
-th, td {
+.data-table th,
+.data-table td {
   border: 1px solid #ddd;
   padding: 4px 8px;
   text-align: left;
   white-space: nowrap;
 }
 
-th {
+.data-table th {
   background: #f5f5f5;
   position: sticky;
   top: 0;
 }
 
-tr:hover {
+.data-table tr:hover {
   background: #f0f8ff;
+}
+
+.table-note {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+/* Anomaly highlighting */
+.anomaly-high {
+  background: #fff3cd;
+  font-weight: bold;
+}
+
+/* Anomaly panel on employee detail */
+details.anomaly-panel {
+  margin: 1rem 24px;
+  border: 2px solid #e74c3c;
+  border-radius: 8px;
+  background: #fef9f9;
+}
+
+details.anomaly-panel summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+details.anomaly-panel[open] summary {
+  border-bottom: 1px solid #f0d0d0;
+}
+
+details.anomaly-panel .anomaly-panel-content {
+  padding: 0 16px 16px;
+}
+
+details.anomaly-panel .anomaly-panel-content h3 {
+  margin: 1rem 0 0.25rem;
+}
+
+details.anomaly-panel .anomaly-panel-content .table-note {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+details.anomaly-panel .anomaly-panel-content .data-table {
+  margin-left: 0;
+  margin-right: 0;
+  width: 100%;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  background: #e74c3c;
+  color: white;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* Chart wrapper — isolates chart so nothing overflows into surrounding content */
+.chart-wrapper {
+  position: relative;
+  margin: 1rem 24px;
+  overflow: hidden;
+}
+
+.chart-wrapper.chart-column {
+  height: 400px;
+}
+
+
+.chart-wrapper.chart-bar {
+  min-height: 200px;
+}
+
+/* Charts.css overrides */
+.chart-wrapper .charts-css {
+  margin: 0;
+  width: 100%;
+}
+
+.chart-wrapper.chart-column .charts-css {
+  --labels-size: 100px;
+}
+
+.chart-wrapper.chart-line .charts-css,
+.chart-wrapper.chart-area .charts-css {
+  --aspect-ratio: 21 / 9;
+  --labels-size: 3rem;
+}
+
+.chart-wrapper.chart-bar .charts-css {
+  --labels-size: 160px;
+}
+
+.charts-css .data {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Line/area chart styling */
+.chart-wrapper.chart-line .charts-css td,
+.chart-wrapper.chart-area .charts-css td {
+  --line-size: 3px;
+}
+
+/* Horizontal labels for line/area charts */
+.chart-wrapper.chart-line .charts-css th[scope="row"],
+.chart-wrapper.chart-area .charts-css th[scope="row"] {
+  font-size: 11px;
+}
+
+/* Y-axis scale */
+.chart-with-axis {
+  display: flex;
+  align-items: stretch;
+}
+
+.y-axis {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 0 0;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1;
+  color: #888;
+  text-align: right;
+  min-width: 60px;
+}
+
+.y-axis li {
+  white-space: nowrap;
+}
+
+/* Invisible spacer at the bottom of the y-axis matching --labels-size */
+.y-axis::before {
+  content: "";
+  flex: 0 0 3rem;
+}
+
+.chart-with-axis .chart-wrapper {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Chart row layout — stacked by default, side-by-side on wide screens */
+.charts-row {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 24px;
+}
+
+.charts-row-item {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.charts-row-item h2 {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.charts-row-item .chart-wrapper {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+@media (min-width: 900px) {
+  .charts-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .charts-row-item {
+    flex: 1 1 0;
+  }
+}
+
+/* Section links */
+.section-links ul {
+  list-style: none;
+  padding: 0;
+}
+
+.section-links li {
+  margin: 8px 0;
+  font-size: 15px;
 }

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS employees (
 CREATE TABLE IF NOT EXISTS timesheets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   employee_id INTEGER NOT NULL REFERENCES employees(id),
+  raw_employee_name TEXT,
   week_ending TEXT NOT NULL,
   mon_st_hours REAL NOT NULL DEFAULT 0,
   tue_st_hours REAL NOT NULL DEFAULT 0,

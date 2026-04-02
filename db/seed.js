@@ -38,12 +38,13 @@ const upsertEmployee = db.prepare(`
 
 const insertTimesheet = db.prepare(`
   INSERT INTO timesheets (
-    employee_id, week_ending,
+    employee_id, raw_employee_name, week_ending,
     mon_st_hours, tue_st_hours, wed_st_hours, thu_st_hours, fri_st_hours, sat_st_hours, sun_st_hours,
     mon_ot_hours, tue_ot_hours, wed_ot_hours, thu_ot_hours, fri_ot_hours, sat_ot_hours, sun_ot_hours,
     standard_rate, overtime_rate, benefits_rate
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (employee_id, week_ending) DO UPDATE SET
+    raw_employee_name = excluded.raw_employee_name,
     mon_st_hours = excluded.mon_st_hours,
     tue_st_hours = excluded.tue_st_hours,
     wed_st_hours = excluded.wed_st_hours,
@@ -81,6 +82,7 @@ const seed = db.transaction(() => {
 
     insertTimesheet.run(
       employeeId,
+      name,
       weekEnding,
       ...cols.slice(5).map(Number)
     );
