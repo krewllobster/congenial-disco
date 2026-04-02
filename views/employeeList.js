@@ -57,6 +57,7 @@ export function employeeListView({ dailyStats, rateStats, totals, levelAgg, anom
       <td>${e.weeks_worked}</td>
       <td>${e.total_st_hours}</td>
       <td>${e.total_ot_hours}</td>
+      <td>${money(e.total_benefits)}</td>
       <td>${money(e.total_pay)}</td>
     </tr>`).join("");
 
@@ -102,7 +103,7 @@ export function employeeListView({ dailyStats, rateStats, totals, levelAgg, anom
   <h2>Employee Totals</h2>
   <table class="data-table">
     <thead>
-      <tr><th>Name</th><th>ID</th><th>Level</th><th>Occupation</th><th>Weeks</th><th>ST Hours</th><th>OT Hours</th><th>Total Pay</th></tr>
+      <tr><th>Name</th><th>ID</th><th>Level</th><th>Occupation</th><th>Weeks</th><th>ST Hours</th><th>OT Hours</th><th>Benefits</th><th>Total Pay</th></tr>
     </thead>
     <tbody>${totalsRows}</tbody>
   </table>`;
